@@ -40,13 +40,13 @@ class ResponseResolver
      *
      * @return array|null
      */
-    private function resolve(array $tags, array $routeProps)
+    private function resolve(array $tags, array $routeProps, $controller, $method)
     {
         foreach (static::$strategies as $strategy) {
             $strategy = new $strategy();
 
             /** @var Response[]|null $response */
-            $responses = $strategy($this->route, $tags, $routeProps);
+            $responses = $strategy($this->route, $tags, $routeProps, $controller, $method);
 
             if (! is_null($responses)) {
                 return array_map(function (Response $response) {
@@ -63,9 +63,9 @@ class ResponseResolver
      *
      * @return array
      */
-    public static function getResponse($route, $tags, $routeProps)
+    public static function getResponse($route, $tags, $routeProps, $controller, $method)
     {
-        return (new static($route))->resolve($tags, $routeProps);
+        return (new static($route))->resolve($tags, $routeProps, $controller, $method);
     }
 
     /**
