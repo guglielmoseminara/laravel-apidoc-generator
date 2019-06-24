@@ -26,7 +26,7 @@ class ResponseCallStrategy
      *
      * @return array|null
      */
-    public function __invoke(Route $route, array $tags, array $routeProps)
+    public function __invoke(Route $route, array $tags, array $routeProps, $controller, $method)
     {
         $rulesToApply = $routeProps['rules']['response_calls'] ?? [];
         if (! $this->shouldMakeApiCall($route, $rulesToApply)) {
