@@ -57,6 +57,7 @@ class Generator
         list($class, $method) = Utils::getRouteActionUses($route->getAction());
         $controller = new ReflectionClass($class);
         $method = $controller->getMethod($method);
+        $properties = $controller->getDefaultProperties();
 
         $routeGroup = $this->getRouteGroup($controller, $method);
         $docBlock = $this->parseDocBlock($method);
@@ -66,8 +67,7 @@ class Generator
             'rules' => $rulesToApply,
             'body' => $bodyParameters,
             'query' => $queryParameters,
-        ]);
-
+        ], $controller, $method);
         $parsedRoute = [
             'id' => md5($this->getUri($route).':'.implode($this->getMethods($route))),
             'group' => $routeGroup,
