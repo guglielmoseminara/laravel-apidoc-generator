@@ -9,10 +9,11 @@ use Illuminate\Routing\Route;
 use Mpociot\Reflection\DocBlock;
 use Mpociot\Reflection\DocBlock\Tag;
 use Mpociot\ApiDoc\Tools\Traits\ParamHelpers;
+use Mpociot\ApiDoc\Tools\Traits\FormRequestHelpers;
 
 class Generator
 {
-    use ParamHelpers;
+    use ParamHelpers, FormRequestHelpers;
 
     /**
      * @var DocumentationConfig
@@ -59,8 +60,8 @@ class Generator
 
         $routeGroup = $this->getRouteGroup($controller, $method);
         $docBlock = $this->parseDocBlock($method);
-        $bodyParameters = $this->getBodyParameters($method, $docBlock['tags']);
-        $queryParameters = $this->getQueryParameters($method, $docBlock['tags']);
+        $bodyParameters = $this->getBodyParameters($method, $docBlock['tags'], $controller);
+        $queryParameters = $this->getQueryParameters($method, $docBlock['tags'], $controller);
         $content = ResponseResolver::getResponse($route, $docBlock['tags'], [
             'rules' => $rulesToApply,
             'body' => $bodyParameters,
@@ -153,7 +154,6 @@ class Generator
 
                 return [$name => compact('type', 'description', 'required', 'value')];
             })->toArray();
-
         return $parameters;
     }
 
@@ -163,7 +163,7 @@ class Generator
      *
      * @return array
      */
-    protected function getQueryParameters(ReflectionMethod $method, array $tags)
+    protected function getQueryParameters(ReflectionMethod $method, array $tags, $controller)
     {
         foreach ($method->getParameters() as $param) {
             $paramType = $param->getType();
@@ -181,6 +181,16 @@ class Generator
                 continue;
             }
 
+            $properties = $controller->getDefaultProperties();
+            /* Compatibility for l5 resource controller */
+            if (isset($properties['formRequest'])) {
+                $methodName = $method->getName();
+                if (method_exists($properties['formRequest'], $methodName)) {
+                    $rules = $properties['formRequest']::$methodName();
+                    $params = $this->getParams($rules, $properties['formRequest']);
+                    return $params;
+                }
+            }
             if (class_exists('\Illuminate\Foundation\Http\FormRequest') && $parameterClass->isSubclassOf(\Illuminate\Foundation\Http\FormRequest::class) || class_exists('\Dingo\Api\Http\FormRequest') && $parameterClass->isSubclassOf(\Dingo\Api\Http\FormRequest::class)) {
                 $formRequestDocBlock = new DocBlock($parameterClass->getDocComment());
                 $queryParametersFromDocBlock = $this->getQueryParametersFromDocBlock($formRequestDocBlock->getTags());
@@ -231,7 +241,9 @@ class Generator
 
                 return [$name => compact('description', 'required', 'value')];
             })->toArray();
-
+        /* if (count($parameters) > 0) {
+            dd($parameters);
+        }*/
         return $parameters;
     }
 
