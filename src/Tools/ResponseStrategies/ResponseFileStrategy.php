@@ -18,7 +18,7 @@ class ResponseFileStrategy
      *
      * @return array|null
      */
-    public function __invoke(Route $route, array $tags, array $routeProps)
+    public function __invoke(Route $route, array $tags, array $routeProps, $controller, $method)
     {
         return $this->getFileResponses($tags);
     }
