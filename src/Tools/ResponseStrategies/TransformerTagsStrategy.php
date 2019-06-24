@@ -23,9 +23,9 @@ class TransformerTagsStrategy
      *
      * @return array|null
      */
-    public function __invoke(Route $route, array $tags, array $routeProps)
+    public function __invoke(Route $route, array $tags, array $routeProps, $controller, $method)
     {
-        return $this->getTransformerResponse($tags);
+        return $this->getTransformerResponse($tags, $controller, $method);
     }
 
     /**
@@ -35,26 +35,39 @@ class TransformerTagsStrategy
      *
      * @return array|null
      */
-    protected function getTransformerResponse(array $tags)
+    protected function getTransformerResponse(array $tags, $controller, $method)
     {
         try {
-            if (empty($transformerTag = $this->getTransformerTag($tags))) {
-                return;
-            }
-
-            $transformer = $this->getTransformerClass($transformerTag);
-            $model = $this->getClassToBeTransformed($tags, (new ReflectionClass($transformer))->getMethod('transform'));
-            $modelInstance = $this->instantiateTransformerModel($model);
-
+            $properties = $controller->getDefaultProperties();
+            $methodName = $method->getName();
             $fractal = new Manager();
 
             if (! is_null(config('apidoc.fractal.serializer'))) {
                 $fractal->setSerializer(app(config('apidoc.fractal.serializer')));
             }
 
-            $resource = (strtolower($transformerTag->getName()) == 'transformercollection')
-                ? new Collection([$modelInstance, $modelInstance], new $transformer)
-                : new Item($modelInstance, new $transformer);
+            if (isset($properties[$methodName.'Presenter'])) {
+                $presenter = new $properties[$methodName.'Presenter']();
+                $transformer = get_class($presenter->getTransformer());
+                $model = $this->getClassToBeTransformed($tags, (new ReflectionClass($transformer))->getMethod('transform'));
+                $modelInstance = $this->instantiateTransformerModel($model);    
+                $resource = $methodName == 'index'
+                    ? new Collection([$modelInstance, $modelInstance], new $transformer)
+                    : new Item($modelInstance, new $transformer);        
+            }
+            else {
+                if (empty($transformerTag = $this->getTransformerTag($tags))) {
+                    return;
+                }
+    
+                $transformer = $this->getTransformerClass($transformerTag);
+                $model = $this->getClassToBeTransformed($tags, (new ReflectionClass($transformer))->getMethod('transform'));
+                $modelInstance = $this->instantiateTransformerModel($model);
+    
+                $resource = (strtolower($transformerTag->getName()) == 'transformercollection')
+                    ? new Collection([$modelInstance, $modelInstance], new $transformer)
+                    : new Item($modelInstance, new $transformer);        
+            }
 
             return [response($fractal->createData($resource)->toJson())];
         } catch (\Exception $e) {
@@ -105,27 +118,22 @@ class TransformerTagsStrategy
      */
     protected function instantiateTransformerModel(string $type)
     {
-        try {
-            // try Eloquent model factory
-            return factory($type)->make();
-        } catch (\Exception $e) {
-            if (Flags::$shouldBeVerbose) {
-                echo "Eloquent model factory failed to instantiate {$type}; trying to fetch from database";
-            }
+        if (Flags::$shouldBeVerbose) {
+            echo "Eloquent model factory failed to instantiate {$type}; trying to fetch from database";
+        }
 
-            $instance = new $type;
-            if ($instance instanceof \Illuminate\Database\Eloquent\Model) {
-                try {
-                    // we can't use a factory but can try to get one from the database
-                    $firstInstance = $type::first();
-                    if ($firstInstance) {
-                        return $firstInstance;
-                    }
-                } catch (\Exception $e) {
-                    // okay, we'll stick with `new`
-                    if (Flags::$shouldBeVerbose) {
-                        echo "Failed to fetch first {$type} from database; using `new` to instantiate";
-                    }
+        $instance = new $type;
+        if ($instance instanceof \Illuminate\Database\Eloquent\Model) {
+            try {
+                // we can't use a factory but can try to get one from the database
+                $firstInstance = $type::first();
+                if ($firstInstance) {
+                    return $firstInstance;
+                }
+            } catch (\Exception $e) {
+                // okay, we'll stick with `new`
+                if (Flags::$shouldBeVerbose) {
+                    echo "Failed to fetch first {$type} from database; using `new` to instantiate";
                 }
             }
         }
