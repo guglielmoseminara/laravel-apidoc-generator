@@ -50,23 +50,23 @@ class TransformerTagsStrategy
                 $presenter = new $properties[$methodName.'Presenter']();
                 $transformer = get_class($presenter->getTransformer());
                 $model = $this->getClassToBeTransformed($tags, (new ReflectionClass($transformer))->getMethod('transform'));
-                $modelInstance = $this->instantiateTransformerModel($model);    
+                $modelInstance = self::instantiateTransformerModel($model);
                 $resource = $methodName == 'index'
                     ? new Collection([$modelInstance, $modelInstance], new $transformer)
-                    : new Item($modelInstance, new $transformer);        
+                    : new Item($modelInstance, new $transformer);
             }
             else {
                 if (empty($transformerTag = $this->getTransformerTag($tags))) {
                     return;
                 }
-    
+
                 $transformer = $this->getTransformerClass($transformerTag);
                 $model = $this->getClassToBeTransformed($tags, (new ReflectionClass($transformer))->getMethod('transform'));
-                $modelInstance = $this->instantiateTransformerModel($model);
-    
+                $modelInstance = self::instantiateTransformerModel($model);
+
                 $resource = (strtolower($transformerTag->getName()) == 'transformercollection')
                     ? new Collection([$modelInstance, $modelInstance], new $transformer)
-                    : new Item($modelInstance, new $transformer);        
+                    : new Item($modelInstance, new $transformer);
             }
 
             return [response($fractal->createData($resource)->toJson())];
@@ -116,7 +116,7 @@ class TransformerTagsStrategy
      *
      * @return mixed
      */
-    protected function instantiateTransformerModel(string $type)
+    public static function instantiateTransformerModel(string $type)
     {
         if (Flags::$shouldBeVerbose) {
             echo "Eloquent model factory failed to instantiate {$type}; trying to fetch from database";
