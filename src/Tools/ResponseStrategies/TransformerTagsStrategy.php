@@ -54,23 +54,31 @@ class TransformerTagsStrategy
                 $resource = $methodName == 'index'
                     ? new Collection([$modelInstance, $modelInstance], new $transformer)
                     : new Item($modelInstance, new $transformer);
+                $response = response($fractal->createData($resource)->toArray()['data']);
             }
             else {
                 if (empty($transformerTag = $this->getTransformerTag($tags))) {
                     return;
                 }
-
                 $transformer = $this->getTransformerClass($transformerTag);
-                $model = $this->getClassToBeTransformed($tags, (new ReflectionClass($transformer))->getMethod('transform'));
-                $modelInstance = self::instantiateTransformerModel($model);
+                if ($transformerTag->getName() == 'transformerModel') {
+                    $model = $this->getClassToBeTransformed($tags, null);
+                    $modelInstance = self::instantiateTransformerModel($model);
+                    $response = response($modelInstance);
+                } else {
+                    $model = $this->getClassToBeTransformed($tags, (new ReflectionClass($transformer))->getMethod('transform'));
+                    $modelInstance = self::instantiateTransformerModel($model);
 
-                $resource = (strtolower($transformerTag->getName()) == 'transformercollection')
-                    ? new Collection([$modelInstance, $modelInstance], new $transformer)
-                    : new Item($modelInstance, new $transformer);
+                    $resource = (strtolower($transformerTag->getName()) == 'transformercollection')
+                        ? new Collection([$modelInstance, $modelInstance], new $transformer)
+                        : new Item($modelInstance, new $transformer);
+                    $response = response($fractal->createData($resource)->toArray()['data']);
+                }
             }
 
-            return [response($fractal->createData($resource)->toJson())];
+            return [$response];
         } catch (\Exception $e) {
+            dd($e->getMessage());
             return;
         }
     }
@@ -91,7 +99,7 @@ class TransformerTagsStrategy
      *
      * @return null|string
      */
-    private function getClassToBeTransformed(array $tags, ReflectionMethod $transformerMethod)
+    private function getClassToBeTransformed(array $tags, ReflectionMethod $transformerMethod = null)
     {
         $modelTag = array_first(array_filter($tags, function ($tag) {
             return ($tag instanceof Tag) && strtolower($tag->getName()) == 'transformermodel';
@@ -140,7 +148,6 @@ class TransformerTagsStrategy
                 }
             } catch (\Exception $e) {
                 // okay, we'll stick with `new`
-                dd($e->getMessage());
                 if (Flags::$shouldBeVerbose) {
                     echo "Failed to fetch first {$type} from database; using `new` to instantiate";
                 }
@@ -159,10 +166,9 @@ class TransformerTagsStrategy
     {
         $transFormerTags = array_values(
             array_filter($tags, function ($tag) {
-                return ($tag instanceof Tag) && in_array(strtolower($tag->getName()), ['transformer', 'transformercollection']);
+                return ($tag instanceof Tag) && in_array(strtolower($tag->getName()), ['transformer', 'transformercollection', 'transformermodel']);
             })
         );
-
         return array_first($transFormerTags);
     }
 }

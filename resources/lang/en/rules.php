@@ -31,4 +31,9 @@ return [
     'timezone' => 'Must be a valid timezone identifier',
     'exists' => 'Valid :attribute :attribute',
     'regex' => 'Must match this regular expression: `:attribute`',
+    'index' => 'Search :resource',
+    'show' => 'Show the Detail of an :resource',
+    'store' => 'Insert :resource',
+    'update' => 'Update an :resource',
+    'destroy' => 'Destroy an :resource'
 ];

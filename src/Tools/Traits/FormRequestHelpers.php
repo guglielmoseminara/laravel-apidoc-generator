@@ -8,9 +8,9 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Faker\Factory;
 
-trait FormRequestHelpers 
+trait FormRequestHelpers
 {
-    public function getParams($rules, $formRequest) 
+    public function getParams($rules, $formRequest)
     {
         $params = [];
         $validator = Validator::make([], $rules);
@@ -28,6 +28,21 @@ trait FormRequestHelpers
             $params[$attribute] = $attributeData;
         }
         return $params;
+    }
+
+    protected function splitValuePairs($parameters, $first = 'is ', $last = 'or ')
+    {
+        $attribute = '';
+        collect($parameters)->map(function ($item, $key) use (&$attribute, $first, $last) {
+            $attribute .= '`' . $item . '` ';
+            if (($key + 1) % 2 === 0) {
+                $attribute .= $last;
+            } else {
+                $attribute .= $first;
+            }
+        });
+        $attribute = rtrim($attribute, $last);
+        return $attribute;
     }
 
     /**

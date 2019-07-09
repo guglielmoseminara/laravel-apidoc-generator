@@ -208,13 +208,11 @@ class Generator
             try {
                 $properties = $controller->getDefaultProperties();
                 /* Compatibility for l5 resource controller */
-                if (isset($properties['formRequest'])) {
-                    $methodName = $method->getName();
-                    if (method_exists($properties['formRequest'], $methodName)) {
-                        $rules = $properties['formRequest']::$methodName();
-                        $params = $this->getParams($rules, $properties['formRequest']);
-                        return $params;
-                    }
+                $methodName = $method->getName();
+                if (isset($properties['formRequest']) && method_exists($properties['formRequest'], $methodName)) {
+                    $rules = $properties['formRequest']::$methodName();
+                    $params = $this->getParams($rules, $properties['formRequest']);
+                    return $params;
                 } else {
                     if (class_exists('\Illuminate\Foundation\Http\FormRequest') && $parameterClass->isSubclassOf(\Illuminate\Foundation\Http\FormRequest::class) || class_exists('\Dingo\Api\Http\FormRequest') && $parameterClass->isSubclassOf(\Dingo\Api\Http\FormRequest::class)) {
                         $formRequest = new $parameterClassName;
