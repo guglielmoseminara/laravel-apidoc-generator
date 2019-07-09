@@ -32,7 +32,11 @@ class ResponseTagStrategy
                     $fractal = new Manager();
                     $model = $value['transformerModel'];
                     $transformer = $value['transformer'];
-                    $modelInstance = TransformerTagsStrategy::instantiateTransformerModel($value['transformerModel']);
+                    $query = null;
+                    if (isset($value['query'])) {
+                        $query = $value['query'];
+                    }
+                    $modelInstance = TransformerTagsStrategy::instantiateTransformerModel($value['transformerModel'], $query);
                     $modelTransformed = new Item($modelInstance, new $transformer);
                     $value = $fractal->createData($modelTransformed)->toArray()['data'];
                 }

@@ -116,7 +116,7 @@ class TransformerTagsStrategy
      *
      * @return mixed
      */
-    public static function instantiateTransformerModel(string $type)
+    public static function instantiateTransformerModel(string $type, $conditions = null)
     {
         if (Flags::$shouldBeVerbose) {
             echo "Eloquent model factory failed to instantiate {$type}; trying to fetch from database";
@@ -126,12 +126,21 @@ class TransformerTagsStrategy
         if ($instance instanceof \Illuminate\Database\Eloquent\Model) {
             try {
                 // we can't use a factory but can try to get one from the database
-                $firstInstance = $type::first();
+                if($conditions) {
+                    $firstInstance = $instance->where(function($query) use ($conditions){
+                        foreach($conditions as $k => $q) {
+                            $query->where($k, $q);
+                        }
+                    })->first();
+                } else {
+                    $firstInstance = $type::first();
+                }
                 if ($firstInstance) {
                     return $firstInstance;
                 }
             } catch (\Exception $e) {
                 // okay, we'll stick with `new`
+                dd($e->getMessage());
                 if (Flags::$shouldBeVerbose) {
                     echo "Failed to fetch first {$type} from database; using `new` to instantiate";
                 }
