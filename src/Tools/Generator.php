@@ -63,6 +63,7 @@ class Generator
         $docBlock = $this->parseDocBlock($method);
         $bodyParameters = $this->getBodyParameters($method, $docBlock['tags'], $controller);
         $queryParameters = $this->getQueryParameters($method, $docBlock['tags'], $controller);
+        $faker = $this->getFaker($docBlock['tags']);
         $content = ResponseResolver::getResponse($route, $docBlock['tags'], [
             'rules' => $rulesToApply,
             'body' => $bodyParameters,
@@ -86,9 +87,9 @@ class Generator
                 if (empty($docBlock['short'])) {
                     $docBlock['short'] = trans()->get('apidoc::rules.update', ['resource' => $properties['resourceName']]);;
                 }
-            } else if ($method->getName() == 'delete') {
+            } else if ($method->getName() == 'destroy') {
                 if (empty($docBlock['short'])) {
-                    $docBlock['short'] = trans()->get('apidoc::rules.delete', ['resource' => $properties['resourceName']]);;
+                    $docBlock['short'] = trans()->get('apidoc::rules.destroy', ['resource' => $properties['resourceName']]);;
                 }
             }
         }
@@ -107,6 +108,7 @@ class Generator
             'authenticated' => $this->getAuthStatusFromDocBlock($docBlock['tags']),
             'response' => $content,
             'showresponse' => ! empty($content),
+            'faker' => $faker
         ];
         $parsedRoute['headers'] = $rulesToApply['headers'] ?? [];
 
@@ -129,6 +131,31 @@ class Generator
                 $parameterClass = new ReflectionClass($parameterClassName);
             } catch (\ReflectionException $e) {
                 continue;
+            }
+
+            try {
+                $properties = $controller->getDefaultProperties();
+                /* Compatibility for l5 resource controller */
+                if (isset($properties['formRequest'])) {
+                    $methodName = $method->getName();
+                    if (method_exists($properties['formRequest'], $methodName)) {
+                        $rules = $properties['formRequest']::$methodName();
+                        $params = $this->getParams($rules, $properties['formRequest']);
+                        return $params;
+                    }
+                } else {
+                    if (class_exists('\Illuminate\Foundation\Http\FormRequest') && $parameterClass->isSubclassOf(\Illuminate\Foundation\Http\FormRequest::class) || class_exists('\Dingo\Api\Http\FormRequest') && $parameterClass->isSubclassOf(\Dingo\Api\Http\FormRequest::class)) {
+                        $formRequest = new $parameterClassName;
+                        if (method_exists($formRequest, 'rules')) {
+                            $rules = $formRequest->rules();
+                            if (count($rules) > 0) {
+                                $params = $this->getParams($rules, $parameterClassName);
+                                return $params;
+                            }
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
             }
 
             if (class_exists('\Illuminate\Foundation\Http\FormRequest') && $parameterClass->isSubclassOf(\Illuminate\Foundation\Http\FormRequest::class) || class_exists('\Dingo\Api\Http\FormRequest') && $parameterClass->isSubclassOf(\Dingo\Api\Http\FormRequest::class)) {
@@ -181,6 +208,18 @@ class Generator
         return $parameters;
     }
 
+    protected function getFaker(array $tags)
+    {
+        $parameters = collect($tags)
+            ->filter(function ($tag) {
+                return $tag instanceof Tag && $tag->getName() === 'faker';
+            })
+            ->map(function ($tag) {
+                return $tag->getContent();
+            })->first();
+        return $parameters;
+    }
+
     /**
      * @param ReflectionMethod $method
      * @param array $tags
@@ -204,7 +243,6 @@ class Generator
             } catch (\ReflectionException $e) {
                 continue;
             }
-
             try {
                 $properties = $controller->getDefaultProperties();
                 /* Compatibility for l5 resource controller */
