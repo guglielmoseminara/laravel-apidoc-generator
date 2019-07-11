@@ -14,7 +14,10 @@ trait FormRequestHelpers
     {
         $params = [];
         $validator = Validator::make([], $rules);
-        foreach ($validator->getRules() as $attribute => $rules) {
+        $rules = array_map(function($rule){
+            return explode('|', $rule);
+        }, $rules);
+        foreach ($rules as $attribute => $rules) {
             $attributeData = [
                 'required' => false,
                 'type' => null,
