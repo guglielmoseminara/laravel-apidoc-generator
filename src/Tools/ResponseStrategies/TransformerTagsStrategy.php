@@ -66,6 +66,10 @@ class TransformerTagsStrategy
                     $modelInstance = self::instantiateTransformerModel($model);
                     $response = response($modelInstance);
                 } else {
+                    if (method_exists($transformer, 'getTransformer')) {
+                        $transformer = new $transformer;
+                        $transformer = get_class($transformer->getTransformer());
+                    }
                     $model = $this->getClassToBeTransformed($tags, (new ReflectionClass($transformer))->getMethod('transform'));
                     $modelInstance = self::instantiateTransformerModel($model);
 

@@ -227,6 +227,14 @@ trait FormRequestHelpers
                 $attributeData['value'] = $faker->ipv4;
                 $attributeData['type'] = $rule;
                 break;
+            case 'in_or':
+                $attributeData['description'][] = Description::parse($rule)->with($this->fancyImplode($parameters, ', ', ' or '))->getDescription();
+                $attributeData['type'] = $rule;
+                break;
+            case 'range_numeric':
+                $attributeData['description'][] = Description::parse($rule)->getDescription();
+                $attributeData['type'] = $rule;
+                break;
         }
         if (isset($attributeData['value']) && $attributeData['value'] === '') {
             $attributeData['value'] = $faker->word;

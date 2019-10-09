@@ -7,6 +7,8 @@ return [
     'alpha_num' => 'Only alpha-numeric characters allowed',
     'in' => ':attribute',
     'not_in' => 'Not in: :attribute',
+    'in_or' => 'Multiple instances of :attribute separated by &#124; ',
+    'range_numeric' => 'Numeric range values separated by -',
     'min' => 'Minimum: `:attribute`',
     'max' => 'Maximum: `:attribute`',
     'between' => 'Between: `:attribute` and `:attribute`',
