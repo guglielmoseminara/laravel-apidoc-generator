@@ -2,19 +2,14 @@
 
 namespace Mpociot\ApiDoc\Tools;
 
-use Faker\Factory;
 use ReflectionClass;
 use ReflectionMethod;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
 use Illuminate\Routing\Route;
-use Mpociot\Reflection\DocBlock;
-use Mpociot\Reflection\DocBlock\Tag;
-use Mpociot\ApiDoc\Tools\Traits\ParamHelpers;
-use Mpociot\ApiDoc\Tools\Traits\FormRequestHelpers;
 
 class Generator
 {
-    use ParamHelpers, FormRequestHelpers;
-
     /**
      * @var DocumentationConfig
      */
@@ -47,440 +42,174 @@ class Generator
     }
 
     /**
-     * @param  \Illuminate\Routing\Route $route
-     * @param array $apply Rules to apply when generating documentation for this route
+     * @param \Illuminate\Routing\Route $route
+     * @param array $rulesToApply Rules to apply when generating documentation for this route
      *
      * @return array
      */
     public function processRoute(Route $route, array $rulesToApply = [])
     {
-        list($class, $method) = Utils::getRouteActionUses($route->getAction());
-        $controller = new ReflectionClass($class);
-        $method = $controller->getMethod($method);
-        $properties = $controller->getDefaultProperties();
+        list($controllerName, $methodName) = Utils::getRouteClassAndMethodNames($route->getAction());
+        $controller = new ReflectionClass($controllerName);
+        $method = $controller->getMethod($methodName);
 
-        $routeGroup = $this->getRouteGroup($controller, $method);
-        $docBlock = $this->parseDocBlock($method);
-        $bodyParameters = $this->getBodyParameters($method, $docBlock['tags'], $controller);
-        $queryParameters = $this->getQueryParameters($method, $docBlock['tags'], $controller);
-        $faker = $this->getFaker($docBlock['tags']);
-        $content = ResponseResolver::getResponse($route, $docBlock['tags'], [
-            'rules' => $rulesToApply,
-            'body' => $bodyParameters,
-            'query' => $queryParameters,
-        ], $controller, $method);
-        $properties = $controller->getDefaultProperties();
-        if (isset($properties['resourceName'])) {
-            if ($method->getName() == 'index') {
-                if (empty($docBlock['short'])) {
-                    $docBlock['short'] = trans()->get('apidoc::rules.index', ['resource' => $properties['resourceName']]);
-                }
-            } else if ($method->getName() == 'show') {
-                if (empty($docBlock['short'])) {
-                    $docBlock['short'] = trans()->get('apidoc::rules.show', ['resource' => $properties['resourceName']]);;
-                }
-            } else if ($method->getName() == 'store') {
-                if (empty($docBlock['short'])) {
-                    $docBlock['short'] = trans()->get('apidoc::rules.store', ['resource' => $properties['resourceName']]);;
-                }
-            } else if ($method->getName() == 'update') {
-                if (empty($docBlock['short'])) {
-                    $docBlock['short'] = trans()->get('apidoc::rules.update', ['resource' => $properties['resourceName']]);;
-                }
-            } else if ($method->getName() == 'destroy') {
-                if (empty($docBlock['short'])) {
-                    $docBlock['short'] = trans()->get('apidoc::rules.destroy', ['resource' => $properties['resourceName']]);;
-                }
-            }
-        }
         $parsedRoute = [
             'id' => md5($this->getUri($route).':'.implode($this->getMethods($route))),
-            'group' => $routeGroup,
-            'title' => $docBlock['short'],
-            'description' => $docBlock['long'],
             'methods' => $this->getMethods($route),
             'uri' => $this->getUri($route),
             'boundUri' => Utils::getFullUrl($route, $rulesToApply['bindings'] ?? ($rulesToApply['response_calls']['bindings'] ?? [])),
-            'queryParameters' => $queryParameters,
-            'bodyParameters' => $bodyParameters,
-            'cleanBodyParameters' => $this->cleanParams($bodyParameters),
-            'cleanQueryParameters' => $this->cleanParams($queryParameters),
-            'authenticated' => $this->getAuthStatusFromDocBlock($docBlock['tags']),
-            'response' => $content,
-            'showresponse' => ! empty($content),
-            'faker' => $faker
         ];
+        $metadata = $this->fetchMetadata($controller, $method, $route, $rulesToApply, $parsedRoute);
+        $parsedRoute['metadata'] = $metadata;
+        $bodyParameters = $this->fetchBodyParameters($controller, $method, $route, $rulesToApply, $parsedRoute);
+        $parsedRoute['bodyParameters'] = $bodyParameters;
+        $parsedRoute['cleanBodyParameters'] = $this->cleanParams($bodyParameters);
+
+        $queryParameters = $this->fetchQueryParameters($controller, $method, $route, $rulesToApply, $parsedRoute);
+        $parsedRoute['queryParameters'] = $queryParameters;
+        $parsedRoute['cleanQueryParameters'] = $this->cleanParams($queryParameters);
+
+        $responses = $this->fetchResponses($controller, $method, $route, $rulesToApply, $parsedRoute);
+        $parsedRoute['response'] = $responses;
+        
+        $parsedRoute['showresponse'] = ! empty($responses);
+
         $parsedRoute['headers'] = $rulesToApply['headers'] ?? [];
+
+        $parsedRoute += $metadata;
 
         return $parsedRoute;
     }
 
-    protected function getBodyParameters(ReflectionMethod $method, array $tags)
+    protected function fetchMetadata(ReflectionClass $controller, ReflectionMethod $method, Route $route, array $rulesToApply, array $context = [])
     {
-        foreach ($method->getParameters() as $param) {
-            $paramType = $param->getType();
-            if ($paramType === null) {
-                continue;
-            }
+        $context['metadata'] = [
+            'groupName' => $this->config->get('default_group', ''),
+            'groupDescription' => '',
+            'title' => '',
+            'description' => '',
+            'authenticated' => false,
+            'faker' => null,
+        ];
 
-            $parameterClassName = version_compare(phpversion(), '7.1.0', '<')
-                ? $paramType->__toString()
-                : $paramType->getName();
+        return $this->iterateThroughStrategies('metadata', $context, [$route, $controller, $method, $rulesToApply]);
+    }
 
-            try {
-                $parameterClass = new ReflectionClass($parameterClassName);
-            } catch (\ReflectionException $e) {
-                continue;
-            }
+    protected function fetchBodyParameters(ReflectionClass $controller, ReflectionMethod $method, Route $route, array $rulesToApply, array $context = [])
+    {
+        return $this->iterateThroughStrategies('bodyParameters', $context, [$route, $controller, $method, $rulesToApply]);
+    }
 
-            try {
-                $properties = $controller->getDefaultProperties();
-                /* Compatibility for l5 resource controller */
-                if (isset($properties['formRequest'])) {
-                    $methodName = $method->getName();
-                    if (method_exists($properties['formRequest'], $methodName)) {
-                        $rules = $properties['formRequest']::$methodName();
-                        $params = $this->getParams($rules, $properties['formRequest']);
-                        return $params;
+    protected function fetchQueryParameters(ReflectionClass $controller, ReflectionMethod $method, Route $route, array $rulesToApply, array $context = [])
+    {
+        return $this->iterateThroughStrategies('queryParameters', $context, [$route, $controller, $method, $rulesToApply]);
+    }
+
+    protected function fetchResponses(ReflectionClass $controller, ReflectionMethod $method, Route $route, array $rulesToApply, array $context = [])
+    {
+        $responses = $this->iterateThroughStrategies('responses', $context, [$route, $controller, $method, $rulesToApply]);
+        if (count($responses)) {
+            return collect($responses)->map(function (string $response, int $status) {
+                return [
+                    'status' => $status ?: 200,
+                    'content' => $response,
+                ];
+            })->values()->toArray();
+        }
+
+        return null;
+    }
+
+    protected function iterateThroughStrategies(string $stage, array $context, array $arguments)
+    {
+        $defaultStrategies = [
+            'metadata' => [
+                \Mpociot\ApiDoc\Strategies\Metadata\GetFromDocBlocks::class,
+            ],
+            'bodyParameters' => [
+                \Mpociot\ApiDoc\Strategies\BodyParameters\GetFromBodyParamTag::class,
+            ],
+            'queryParameters' => [
+                \Mpociot\ApiDoc\Strategies\QueryParameters\GetFromQueryParamTag::class,
+            ],
+            'responses' => [
+                \Mpociot\ApiDoc\Strategies\Responses\UseResponseTag::class,
+                \Mpociot\ApiDoc\Strategies\Responses\UseResponseFileTag::class,
+                \Mpociot\ApiDoc\Strategies\Responses\UseTransformerTags::class,
+                \Mpociot\ApiDoc\Strategies\Responses\ResponseCalls::class,
+            ],
+        ];
+
+        // Use the default strategies for the stage, unless they were explicitly set
+        $strategies = $this->config->get("strategies.$stage", $defaultStrategies[$stage]);
+        $context[$stage] = $context[$stage] ?? [];
+        foreach ($strategies as $strategyClass) {
+            $strategy = new $strategyClass($stage, $this->config);
+            $arguments[] = $context;
+            $results = $strategy(...$arguments);
+            if (! is_null($results)) {
+                foreach ($results as $index => $item) {
+                    // Using a for loop rather than array_merge or +=
+                    // so it does not renumber numeric keys
+                    // and also allows values to be overwritten
+
+                    // Don't allow overwriting if an empty value is trying to replace a set one
+                    if (! in_array($context[$stage], [null, ''], true) && in_array($item, [null, ''], true)) {
+                        continue;
+                    } else {
+                        $context[$stage][$index] = $item;
                     }
-                } else {
-                    if (class_exists('\Illuminate\Foundation\Http\FormRequest') && $parameterClass->isSubclassOf(\Illuminate\Foundation\Http\FormRequest::class) || class_exists('\Dingo\Api\Http\FormRequest') && $parameterClass->isSubclassOf(\Dingo\Api\Http\FormRequest::class)) {
-                        $formRequest = new $parameterClassName;
-                        if (method_exists($formRequest, 'rules')) {
-                            $rules = $formRequest->rules();
-                            if (count($rules) > 0) {
-                                $params = $this->getParams($rules, $parameterClassName);
-                                return $params;
-                            }
-                        }
-                    }
-                }
-            } catch (\Exception $e) {
-            }
-
-            if (class_exists('\Illuminate\Foundation\Http\FormRequest') && $parameterClass->isSubclassOf(\Illuminate\Foundation\Http\FormRequest::class) || class_exists('\Dingo\Api\Http\FormRequest') && $parameterClass->isSubclassOf(\Dingo\Api\Http\FormRequest::class)) {
-                $formRequestDocBlock = new DocBlock($parameterClass->getDocComment());
-                $bodyParametersFromDocBlock = $this->getBodyParametersFromDocBlock($formRequestDocBlock->getTags());
-
-                if (count($bodyParametersFromDocBlock)) {
-                    return $bodyParametersFromDocBlock;
                 }
             }
         }
 
-        return $this->getBodyParametersFromDocBlock($tags);
+        return $context[$stage];
     }
 
     /**
-     * @param array $tags
+     * Create samples at index 0 for array parameters.
+     * Also filter out parameters which were excluded from having examples.
+     *
+     * @param array $params
      *
      * @return array
      */
-    protected function getBodyParametersFromDocBlock(array $tags)
+    protected function cleanParams(array $params)
     {
-        $parameters = collect($tags)
-            ->filter(function ($tag) {
-                return $tag instanceof Tag && $tag->getName() === 'bodyParam';
-            })
-            ->mapWithKeys(function ($tag) {
-                preg_match('/(.+?)\s+(.+?)\s+(required\s+)?(.*)/', $tag->getContent(), $content);
-                if (empty($content)) {
-                    // this means only name and type were supplied
-                    list($name, $type) = preg_split('/\s+/', $tag->getContent());
-                    $required = false;
-                    $description = '';
-                } else {
-                    list($_, $name, $type, $required, $description) = $content;
-                    $description = trim($description);
-                    if ($description == 'required' && empty(trim($required))) {
-                        $required = $description;
-                        $description = '';
-                    }
-                    $required = trim($required) == 'required' ? true : false;
-                }
+        $values = [];
 
-                $type = $this->normalizeParameterType($type);
-                list($description, $example) = $this->parseDescription($description, $type);
-                $value = is_null($example) ? $this->generateDummyValue($type) : $example;
+        // Remove params which have no examples.
+        $params = array_filter($params, function ($details) {
+            return ! is_null($details['value']);
+        });
 
-                return [$name => compact('type', 'description', 'required', 'value')];
-            })->toArray();
-        return $parameters;
-    }
+        foreach ($params as $paramName => $details) {
+            $this->generateConcreteSampleForArrayKeys(
+                $paramName, $details['value'], $values
+            );
+        }
 
-    protected function getFaker(array $tags)
-    {
-        $parameters = collect($tags)
-            ->filter(function ($tag) {
-                return $tag instanceof Tag && $tag->getName() === 'faker';
-            })
-            ->map(function ($tag) {
-                return $tag->getContent();
-            })->first();
-        return $parameters;
+        return $values;
     }
 
     /**
-     * @param ReflectionMethod $method
-     * @param array $tags
+     * For each array notation parameter (eg user.*, item.*.name, object.*.*, user[])
+     * generate concrete sample (user.0, item.0.name, object.0.0, user.0) with example as value.
      *
-     * @return array
+     * @param string $paramName
+     * @param mixed $paramExample
+     * @param array $values The array that holds the result
+     *
+     * @return void
      */
-    protected function getQueryParameters(ReflectionMethod $method, array $tags, $controller)
+    protected function generateConcreteSampleForArrayKeys($paramName, $paramExample, array &$values = [])
     {
-        foreach ($method->getParameters() as $param) {
-            $paramType = $param->getType();
-            if ($paramType === null) {
-                continue;
-            }
-
-            $parameterClassName = version_compare(phpversion(), '7.1.0', '<')
-                ? $paramType->__toString()
-                : $paramType->getName();
-
-            try {
-                $parameterClass = new ReflectionClass($parameterClassName);
-            } catch (\ReflectionException $e) {
-                continue;
-            }
-            try {
-                $properties = $controller->getDefaultProperties();
-                /* Compatibility for l5 resource controller */
-                $methodName = $method->getName();
-                if (isset($properties['formRequest']) && method_exists($properties['formRequest'], $methodName)) {
-                    $rules = $properties['formRequest']::$methodName();
-                    $params = $this->getParams($rules, $properties['formRequest']);
-                    return $params;
-                } else {
-                    if (class_exists('\Illuminate\Foundation\Http\FormRequest') && $parameterClass->isSubclassOf(\Illuminate\Foundation\Http\FormRequest::class) || class_exists('\Dingo\Api\Http\FormRequest') && $parameterClass->isSubclassOf(\Dingo\Api\Http\FormRequest::class)) {
-                        $formRequest = new $parameterClassName;
-                        if (method_exists($formRequest, 'rules')) {
-                            $rules = $formRequest->rules();
-                            if (count($rules) > 0) {
-                                $params = $this->getParams($rules, $parameterClassName);
-                                return $params;
-                            }
-                        }
-                    }
-                }
-            } catch (\Exception $e) {
-            }
-
-            if (class_exists('\Illuminate\Foundation\Http\FormRequest') && $parameterClass->isSubclassOf(\Illuminate\Foundation\Http\FormRequest::class) || class_exists('\Dingo\Api\Http\FormRequest') && $parameterClass->isSubclassOf(\Dingo\Api\Http\FormRequest::class)) {
-                $formRequestDocBlock = new DocBlock($parameterClass->getDocComment());
-                $queryParametersFromDocBlock = $this->getQueryParametersFromDocBlock($formRequestDocBlock->getTags());
-
-                if (count($queryParametersFromDocBlock)) {
-                    return $queryParametersFromDocBlock;
-                }
-            }
+        if (Str::contains($paramName, '[')) {
+            // Replace usages of [] with dot notation
+            $paramName = str_replace(['][', '[', ']', '..'], ['.', '.', '', '.*.'], $paramName);
         }
-
-        return $this->getQueryParametersFromDocBlock($tags);
+        // Then generate a sample item for the dot notation
+        Arr::set($values, str_replace('.*', '.0', $paramName), $paramExample);
     }
 
-    /**
-     * @param array $tags
-     *
-     * @return array
-     */
-    protected function getQueryParametersFromDocBlock(array $tags)
-    {
-        $parameters = collect($tags)
-            ->filter(function ($tag) {
-                return $tag instanceof Tag && $tag->getName() === 'queryParam';
-            })
-            ->mapWithKeys(function ($tag) {
-                preg_match('/(.+?)\s+(required\s+)?(.*)/', $tag->getContent(), $content);
-                if (empty($content)) {
-                    // this means only name was supplied
-                    list($name) = preg_split('/\s+/', $tag->getContent());
-                    $required = false;
-                    $description = '';
-                } else {
-                    list($_, $name, $required, $description) = $content;
-                    $description = trim($description);
-                    if ($description == 'required' && empty(trim($required))) {
-                        $required = $description;
-                        $description = '';
-                    }
-                    $required = trim($required) == 'required' ? true : false;
-                }
-
-                list($description, $value) = $this->parseDescription($description, 'string');
-                if (is_null($value)) {
-                    $value = str_contains($description, ['number', 'count', 'page'])
-                        ? $this->generateDummyValue('integer')
-                        : $this->generateDummyValue('string');
-                }
-
-                return [$name => compact('description', 'required', 'value')];
-            })->toArray();
-        /* if (count($parameters) > 0) {
-            dd($parameters);
-        }*/
-        return $parameters;
-    }
-
-    /**
-     * @param array $tags
-     *
-     * @return bool
-     */
-    protected function getAuthStatusFromDocBlock(array $tags)
-    {
-        $authTag = collect($tags)
-            ->first(function ($tag) {
-                return $tag instanceof Tag && strtolower($tag->getName()) === 'authenticated';
-            });
-
-        return (bool) $authTag;
-    }
-
-    /**
-     * @param ReflectionMethod $method
-     *
-     * @return array
-     */
-    protected function parseDocBlock(ReflectionMethod $method)
-    {
-        $comment = $method->getDocComment();
-        $phpdoc = new DocBlock($comment);
-
-        return [
-            'short' => $phpdoc->getShortDescription(),
-            'long' => $phpdoc->getLongDescription()->getContents(),
-            'tags' => $phpdoc->getTags(),
-        ];
-    }
-
-    /**
-     * @param ReflectionClass $controller
-     * @param ReflectionMethod $method
-     *
-     * @return string
-     */
-    protected function getRouteGroup(ReflectionClass $controller, ReflectionMethod $method)
-    {
-        // @group tag on the method overrides that on the controller
-        $docBlockComment = $method->getDocComment();
-        if ($docBlockComment) {
-            $phpdoc = new DocBlock($docBlockComment);
-            foreach ($phpdoc->getTags() as $tag) {
-                if ($tag->getName() === 'group') {
-                    return $tag->getContent();
-                }
-            }
-        }
-
-        $docBlockComment = $controller->getDocComment();
-        if ($docBlockComment) {
-            $phpdoc = new DocBlock($docBlockComment);
-            foreach ($phpdoc->getTags() as $tag) {
-                if ($tag->getName() === 'group') {
-                    return $tag->getContent();
-                }
-            }
-        }
-
-        return $this->config->get(('default_group'));
-    }
-
-    private function normalizeParameterType($type)
-    {
-        $typeMap = [
-            'int' => 'integer',
-            'bool' => 'boolean',
-            'double' => 'float',
-        ];
-
-        return $type ? ($typeMap[$type] ?? $type) : 'string';
-    }
-
-    private function generateDummyValue(string $type)
-    {
-        $faker = Factory::create();
-        if ($this->config->get('faker_seed')) {
-            $faker->seed($this->config->get('faker_seed'));
-        }
-        $fakeFactories = [
-            'integer' => function () use ($faker) {
-                return $faker->numberBetween(1, 20);
-            },
-            'number' => function () use ($faker) {
-                return $faker->randomFloat();
-            },
-            'float' => function () use ($faker) {
-                return $faker->randomFloat();
-            },
-            'boolean' => function () use ($faker) {
-                return $faker->boolean();
-            },
-            'string' => function () use ($faker) {
-                return $faker->word;
-            },
-            'array' => function () {
-                return [];
-            },
-            'object' => function () {
-                return new \stdClass;
-            },
-        ];
-
-        $fakeFactory = $fakeFactories[$type] ?? $fakeFactories['string'];
-
-        return $fakeFactory();
-    }
-
-    /**
-     * Allows users to specify an example for the parameter by writing 'Example: the-example',
-     * to be used in example requests and response calls.
-     *
-     * @param string $description
-     * @param string $type The type of the parameter. Used to cast the example provided, if any.
-     *
-     * @return array The description and included example.
-     */
-    private function parseDescription(string $description, string $type)
-    {
-        $example = null;
-        if (preg_match('/(.*)\s+Example:\s*(.*)\s*/', $description, $content)) {
-            $description = $content[1];
-
-            // examples are parsed as strings by default, we need to cast them properly
-            $example = $this->castToType($content[2], $type);
-        }
-
-        return [$description, $example];
-    }
-
-    /**
-     * Cast a value from a string to a specified type.
-     *
-     * @param string $value
-     * @param string $type
-     *
-     * @return mixed
-     */
-    private function castToType(string $value, string $type)
-    {
-        $casts = [
-            'integer' => 'intval',
-            'number' => 'floatval',
-            'float' => 'floatval',
-            'boolean' => 'boolval',
-        ];
-
-        // First, we handle booleans. We can't use a regular cast,
-        //because PHP considers string 'false' as true.
-        if ($value == 'false' && $type == 'boolean') {
-            return false;
-        }
-
-        if (isset($casts[$type])) {
-            return $casts[$type]($value);
-        }
-
-        return $value;
-    }
 }

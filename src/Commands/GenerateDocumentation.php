@@ -42,6 +42,11 @@ class GenerateDocumentation extends Command
      */
     private $docConfig;
 
+    /**
+     * @var string
+     */
+    private $baseUrl;
+
     public function __construct(RouteMatcher $routeMatcher)
     {
         parent::__construct();
@@ -55,14 +60,15 @@ class GenerateDocumentation extends Command
      */
     public function handle()
     {
-        // Using a global static variable here, so fuck off if you don't like it
-        // Also, the --verbose option is included with all Artisan commands
+        // Using a global static variable here, so fuck off if you don't like it.
+        // Also, the --verbose option is included with all Artisan commands.
         Flags::$shouldBeVerbose = $this->option('verbose');
 
         $this->docConfig = new DocumentationConfig(config('apidoc'));
+        $this->baseUrl = $this->docConfig->get('base_url') ?? config('app.url');
 
         try {
-            URL::forceRootUrl($this->docConfig->get('base_url'));
+            URL::forceRootUrl($this->baseUrl);
         } catch (\Error $e) {
             echo "Warning: Couldn't force base url as your version of Lumen doesn't have the forceRootUrl method.\n";
             echo "You should probably double check URLs in your generated documentation.\n";
@@ -76,13 +82,14 @@ class GenerateDocumentation extends Command
 
         $generator = new Generator($this->docConfig);
         $parsedRoutes = $this->processRoutes($generator, $routes);
-        $parsedRoutes = collect($parsedRoutes)->groupBy('group')
+        $groupedRoutes = collect($parsedRoutes)
+            ->groupBy('groupName')
             ->sortBy(static function ($group) {
                 /* @var $group Collection */
-                return $group->first()['group'];
+                return $group->first()['groupName'];
             }, SORT_NATURAL);
 
-        $this->writeMarkdown($parsedRoutes);
+        $this->writeMarkdown($groupedRoutes);
     }
 
     /**
@@ -111,7 +118,7 @@ class GenerateDocumentation extends Command
                 $route['output'] = (string) view('apidoc::partials.route')
                     ->with('route', $route)
                     ->with('settings', $settings)
-                    ->with('baseUrl', $this->docConfig->get('base_url'))
+                    ->with('baseUrl', $this->baseUrl)
                     ->render();
 
                 return $route;
@@ -234,13 +241,13 @@ class GenerateDocumentation extends Command
     }
 
     /**
-     * @param $route
+     * @param Route $route
      *
      * @return bool
      */
     private function isValidRoute(Route $route)
     {
-        $action = Utils::getRouteActionUses($route->getAction());
+        $action = Utils::getRouteClassAndMethodNames($route->getAction());
         if (is_array($action)) {
             $action = implode('@', $action);
         }
@@ -249,15 +256,15 @@ class GenerateDocumentation extends Command
     }
 
     /**
-     * @param $action
+     * @param array $action
      *
      * @throws ReflectionException
      *
      * @return bool
      */
-    private function isRouteVisibleForDocumentation($action)
+    private function isRouteVisibleForDocumentation(array $action)
     {
-        list($class, $method) = Utils::getRouteActionUses($action);
+        list($class, $method) = Utils::getRouteClassAndMethodNames($action);
         $reflection = new ReflectionClass($class);
 
         if (! $reflection->hasMethod($method)) {
@@ -270,7 +277,7 @@ class GenerateDocumentation extends Command
             $phpdoc = new DocBlock($comment);
 
             return collect($phpdoc->getTags())
-                ->filter(function ($tag) use ($action) {
+                ->filter(function ($tag) {
                     return $tag->getName() === 'hideFromAPIDocumentation';
                 })
                 ->isEmpty();
@@ -288,7 +295,7 @@ class GenerateDocumentation extends Command
      */
     private function generatePostmanCollection(Collection $routes)
     {
-        $writer = new CollectionWriter($routes, $this->docConfig->get('base_url'));
+        $writer = new CollectionWriter($routes, $this->baseUrl);
 
         return $writer->getCollection();
     }

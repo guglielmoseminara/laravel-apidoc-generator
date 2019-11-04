@@ -14,7 +14,6 @@
 @foreach($settings['languages'] as $language)
 @include("apidoc::partials.example-requests.$language")
 
-
 @endforeach
 
 @if(in_array('GET',$route['methods']) || (isset($route['showresponse']) && $route['showresponse']))
@@ -54,16 +53,16 @@
 Parameter | Type | Status | Description
 --------- | ------- | ------- | ------- | -----------
 @foreach($route['bodyParameters'] as $attribute => $parameter)
-    {{$attribute}} | {{$parameter['type']}} | @if($parameter['required']) required @else optional @endif | {!! implode(' ',$parameter['description']) !!}
+    {{$attribute}} | {{$parameter['type']}} | @if($parameter['required']) required @else optional @endif | {!! !is_array($parameter['description']) ?: implode($parameter['description']) !!}
 @endforeach
 @endif
 @if(count($route['queryParameters']))
 #### Query Parameters
 
-Parameter | Type | Status | Description
+Parameter | Status | Description
 --------- | ------- | ------- | -----------
 @foreach($route['queryParameters'] as $attribute => $parameter)
-    {{$attribute}} | {{$parameter['type']}} | @if($parameter['required']) required @else optional @endif | {!! implode(' ',$parameter['description']); !!} 
+    {{$attribute}} | @if($parameter['required']) required @else optional @endif | {!! !is_array($parameter['description']) ?: implode($parameter['description']) !!}
 @endforeach
 @endif
 

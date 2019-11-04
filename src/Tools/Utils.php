@@ -6,6 +6,8 @@ use Illuminate\Support\Str;
 use Illuminate\Routing\Route;
 use League\Flysystem\Filesystem;
 use League\Flysystem\Adapter\Local;
+use Symfony\Component\Console\Output\ConsoleOutput;
+use Symfony\Component\Console\Output\OutputInterface;
 
 class Utils
 {
@@ -71,5 +73,38 @@ class Utils
         $adapter = new Local(realpath(__DIR__.'/../../'));
         $fs = new Filesystem($adapter);
         $fs->deleteDir($dir);
+    }
+
+    public static function getRouteClassAndMethodNames($routeOrAction)
+    {
+        $action = $routeOrAction instanceof Route ? $routeOrAction->getAction() : $routeOrAction;
+
+        if ($action['uses'] !== null) {
+            if (is_array($action['uses'])) {
+                return $action['uses'];
+            } elseif (is_string($action['uses'])) {
+                return explode('@', $action['uses']);
+            }
+        }
+        if (array_key_exists(0, $action) && array_key_exists(1, $action)) {
+            return [
+                0 => $action[0],
+                1 => $action[1],
+            ];
+        }
+    }
+
+    public static function dumpException(\Exception $e)
+    {
+        if (class_exists(\NunoMaduro\Collision\Handler::class)) {
+            $output = new ConsoleOutput(OutputInterface::VERBOSITY_VERBOSE);
+            $handler = new \NunoMaduro\Collision\Handler(new \NunoMaduro\Collision\Writer($output));
+            $handler->setInspector(new \Whoops\Exception\Inspector($e));
+            $handler->setException($e);
+            $handler->handle();
+        } else {
+            dump($e);
+            echo "You can get better exception output by installing the library \nunomaduro/collision (PHP 7.1+ only).\n";
+        }
     }
 }
