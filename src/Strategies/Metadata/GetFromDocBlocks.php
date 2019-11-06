@@ -19,7 +19,7 @@ class GetFromDocBlocks extends Strategy
         $methodDocBlock = $docBlocks['method'];
         $properties = $controller->getDefaultProperties();
         $description = $methodDocBlock->getLongDescription()->getContents();
-        $faker = $this->getFaker($docBlocks['tags']);
+        $faker = $this->getFaker($methodDocBlock->getTags());
         if (isset($properties['resourceName'])) {
             if ($method->getName() == 'index') {
                 if (empty($description)) {
