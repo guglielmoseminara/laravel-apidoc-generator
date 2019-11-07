@@ -14,6 +14,9 @@ trait FormRequestHelpers
     {
         $params = [];
         $validator = Validator::make([], $rules);
+        $rules = array_filter($rules, function($rule) {
+            return is_string($rule) ? true : false;
+        });
         $rules = array_map(function($rule){
             return explode('|', $rule);
         }, $rules);
