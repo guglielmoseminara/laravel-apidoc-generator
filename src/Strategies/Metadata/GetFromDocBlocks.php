@@ -45,11 +45,17 @@ class GetFromDocBlocks extends Strategy
         }
 
         list($routeGroupName, $routeGroupDescription, $routeTitle) = $this->getRouteGroupDescriptionAndTitle($methodDocBlock, $docBlocks['class']);
-
+        if (empty($routeTitle)) {
+            if (!empty($methodDocBlock->getShortDescription())) {
+                $routeTitle = $methodDocBlock->getShortDescription();
+            } else if (!empty($description)){
+                $routeTitle = $description;
+            }
+        }
         return [
                 'groupName' => $routeGroupName,
                 'groupDescription' => $routeGroupDescription,
-                'title' => $routeTitle ?: $methodDocBlock->getShortDescription(),
+                'title' => $routeTitle,
                 'description' => $description,
                 'authenticated' => $this->getAuthStatusFromDocBlock($methodDocBlock->getTags()),
                 'faker' => $faker,
