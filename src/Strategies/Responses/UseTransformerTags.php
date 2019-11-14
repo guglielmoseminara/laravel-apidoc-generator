@@ -65,11 +65,14 @@ class UseTransformerTags extends Strategy
                 $presenter = new $properties[$methodName.'Presenter']();
                 $transformer = get_class($presenter->getTransformer());
                 $model = $this->getClassToBeTransformed($tags, (new ReflectionClass($transformer))->getMethod('transform'));
-                $modelInstance = self::instantiateTransformerModel($model);   
-                $resource = $methodName == 'index'
-                    ? new Collection([$modelInstance], new $transformer)
-                    : new Item($modelInstance, new $transformer);   
-                $response = $fractal->createData($resource)->toArray()['data'];  
+                $response = null;
+                if ($model) {
+                    $modelInstance = self::instantiateTransformerModel($model);   
+                    $resource = $methodName == 'index'
+                        ? new Collection([$modelInstance], new $transformer)
+                        : new Item($modelInstance, new $transformer);   
+                    $response = $fractal->createData($resource)->toArray()['data'];      
+                }
             }
             else {
                 if (empty($transformerTag = $this->getTransformerTag($tags))) {
