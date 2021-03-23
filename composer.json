@@ -2,6 +2,7 @@
     "name": "guglielmoseminara/laravel-apidoc-generator",
     "license": "MIT",
     "description": "Generate beautiful API documentation from your Laravel application",
+    "version": "3.9.1",
     "keywords": [
         "API",
         "Documentation",
