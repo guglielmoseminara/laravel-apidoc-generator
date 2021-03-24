@@ -59,26 +59,27 @@ class UseTransformerTags extends Strategy
             /* $resource = (strtolower($transformerTag->getName()) == 'transformercollection')
                 ? new Collection([$modelInstance, $modelInstance], new $transformer)
                 : new Item($modelInstance, new $transformer); */
-            
+
             if (isset($properties[$methodName.'Presenter'])) {
 
                 $presenter = new $properties[$methodName.'Presenter']();
                 $transformer = get_class($presenter->getTransformer());
                 $model = $this->getClassToBeTransformed($tags, (new ReflectionClass($transformer))->getMethod('transform'));
                 $response = null;
-                if ($model) {
-                    $modelInstance = self::instantiateTransformerModel($model);   
+                if ($model && $model != 'Illuminate\Database\Eloquent\Model') {
+                    $modelInstance = self::instantiateTransformerModel($model);
                     $resource = $methodName == 'index'
                         ? new Collection([$modelInstance], new $transformer)
-                        : new Item($modelInstance, new $transformer);   
-                    $response = $fractal->createData($resource)->toArray()['data'];      
+                        : new Item($modelInstance, new $transformer);
+                    $response = $fractal->createData($resource)->toArray()['data'];
                 }
             }
             else {
+
                 if (empty($transformerTag = $this->getTransformerTag($tags))) {
                     return;
                 }
-    
+
                 $transformer = $this->getTransformerClass($transformerTag);
                 if ($transformerTag->getName() == 'transformerModel') {
                     $model = $this->getClassToBeTransformed($tags, null);
@@ -95,7 +96,7 @@ class UseTransformerTags extends Strategy
                         ? new Collection([$modelInstance, $modelInstance], new $transformer)
                         : new Item($modelInstance, new $transformer);
                     $response = $fractal->createData($resource)->toArray()['data'];
-                }        
+                }
             }
             return [json_encode($response)];
         } catch (\Exception $e) {
@@ -160,6 +161,8 @@ class UseTransformerTags extends Strategy
         if (Flags::$shouldBeVerbose) {
             echo "Eloquent model factory failed to instantiate {$type}; trying to fetch from database";
         }
+
+        echo $type;
         $instance = new $type;
         if ($instance instanceof \Illuminate\Database\Eloquent\Model) {
             try {

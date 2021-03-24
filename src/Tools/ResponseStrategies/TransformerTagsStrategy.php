@@ -10,6 +10,7 @@ use Mpociot\ApiDoc\Tools\Flags;
 use League\Fractal\Resource\Item;
 use Mpociot\Reflection\DocBlock\Tag;
 use League\Fractal\Resource\Collection;
+use Illuminate\Support\Arr;
 
 /**
  * Parse a transformer response from the docblock ( @transformer || @transformercollection ).
@@ -105,7 +106,7 @@ class TransformerTagsStrategy
      */
     private function getClassToBeTransformed(array $tags, ReflectionMethod $transformerMethod = null)
     {
-        $modelTag = array_first(array_filter($tags, function ($tag) {
+        $modelTag = Arr::first(array_filter($tags, function ($tag) {
             return ($tag instanceof Tag) && strtolower($tag->getName()) == 'transformermodel';
         }));
 
@@ -113,7 +114,7 @@ class TransformerTagsStrategy
         if ($modelTag) {
             $type = $modelTag->getContent();
         } else {
-            $parameter = array_first($transformerMethod->getParameters());
+            $parameter = Arr::first($transformerMethod->getParameters());
             if ($parameter->hasType() && ! $parameter->getType()->isBuiltin() && class_exists((string) $parameter->getType())) {
                 // ladies and gentlemen, we have a type!
                 $type = (string) $parameter->getType();
@@ -173,6 +174,6 @@ class TransformerTagsStrategy
                 return ($tag instanceof Tag) && in_array(strtolower($tag->getName()), ['transformer', 'transformercollection', 'transformermodel']);
             })
         );
-        return array_first($transFormerTags);
+        return Arr::first($transFormerTags);
     }
 }

@@ -2,7 +2,7 @@
     "name": "guglielmoseminara/laravel-apidoc-generator",
     "license": "MIT",
     "description": "Generate beautiful API documentation from your Laravel application",
-    "version": "3.9.1",
+    "version": "4.0.0",
     "keywords": [
         "API",
         "Documentation",
@@ -18,19 +18,20 @@
     "require": {
         "php": ">=7.0.0",
         "fzaninotto/faker": "~1.8",
-        "illuminate/routing": "5.5.* || 5.6.* || 5.7.* || 5.8.*",
-        "illuminate/support": "5.5.* || 5.6.* || 5.7.* || 5.8.*",
-        "illuminate/console": "5.5.* || 5.6.* || 5.7.* || 5.8.*",
-        "mpociot/documentarian": "^0.2.0",
+        "illuminate/console": "^5.7|^6.0|^7.0|^8.0",
+        "illuminate/routing": "^5.7|^6.0|^7.0|^8.0",
+        "illuminate/support": "^5.7|^6.0|^7.0|^8.0",
+        "league/flysystem": "^1.0",
+        "mpociot/documentarian": "^0.4.0",
         "mpociot/reflection-docblock": "^1.0.1",
-        "ramsey/uuid": "^3.8",
-        "nunomaduro/collision": "^3.0",
-        "league/flysystem": "^1.0"
+        "nunomaduro/collision": "^3.0|^4.0|^5.0",
+        "ramsey/uuid": "^3.8|^4.0",
+        "symfony/var-exporter": "^4.0|^5.0"
     },
     "require-dev": {
         "orchestra/testbench": "3.5.* || 3.6.* || 3.7.*",
         "phpunit/phpunit": "^6.0.0 || ^7.4.0",
-        "dingo/api": "2.0.0-alpha1",
+        "dingo/api": "2.4.6",
         "mockery/mockery": "^1.2.0",
         "league/fractal": "^0.17.0"
     },
