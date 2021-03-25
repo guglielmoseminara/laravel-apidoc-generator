@@ -162,7 +162,6 @@ class UseTransformerTags extends Strategy
             echo "Eloquent model factory failed to instantiate {$type}; trying to fetch from database";
         }
 
-        echo $type;
         $instance = new $type;
         if ($instance instanceof \Illuminate\Database\Eloquent\Model) {
             try {
